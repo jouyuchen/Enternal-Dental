@@ -417,9 +417,12 @@ function applyBarPos() {
   $('nb-min').title = barPos.mini ? '展開' : '縮小';
 }
 /* 手機鍵盤跳出時（iOS 不會縮小版面，只縮小可視區），把按鈕列推到鍵盤上方 */
+const KB_EXTRA = 100;   // 鍵盤開啟時額外抬高的 px，若在 iPhone 上仍覺得太低／太高，調這個數字
 function adjustForKeyboard() {
   const vv = window.visualViewport;
-  const kb = vv ? Math.max(0, window.innerHeight - vv.height - vv.offsetTop) : 0;
+  let kb = vv ? Math.max(0, window.innerHeight - vv.height - vv.offsetTop) : 0;
+  // iPhone 的鍵盤上方還有一條「上一個／下一個／完成」工具列，不算在可視範圍內，要再多抬高避開
+  if (kb > 120) kb += KB_EXTRA;
   $('nudge-bar').style.setProperty('--kb', Math.round(kb) + 'px');
 }
 function visibleBottom() { const vv = window.visualViewport; return vv ? vv.offsetTop + vv.height : innerHeight; }
@@ -445,6 +448,8 @@ function initBar() {
     ['resize', 'scroll'].forEach(ev => window.visualViewport.addEventListener(ev, () => { adjustForKeyboard(); clampBar(); }));
   }
   adjustForKeyboard();
+  // 鍵盤動畫期間數值會變，聚焦／離開輸入時多量幾次
+  ['focusin', 'focusout'].forEach(ev => document.addEventListener(ev, () => [60, 300, 700].forEach(t => setTimeout(() => { adjustForKeyboard(); clampBar(); }, t))));
   Object.assign(barPos, lsGet(BAR_KEY) || {});
   applyBarPos();
   const grip = $('nb-grip');
