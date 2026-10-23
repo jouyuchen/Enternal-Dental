@@ -642,6 +642,11 @@ function initUI() {
   $('eye-btn').onclick = () => setPreview(!document.body.classList.contains('preview'));
   $('hist-toggle').onclick = () => $('hist-panel').classList.toggle('open');
   $('hist-close').onclick  = () => $('hist-panel').classList.remove('open');
+  // 點歷史面板以外的地方（或按 Esc）就收起來
+  document.addEventListener('pointerdown', e => {
+    if ($('hist-panel').classList.contains('open') && !e.target.closest('#hist-panel, #hist-toggle')) $('hist-panel').classList.remove('open');
+  });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') $('hist-panel').classList.remove('open'); });
 }
 
 /* ── Text persistence: last input + history (text only, no dates / positions) ── */
