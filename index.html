@@ -55,7 +55,7 @@ body { font-family:'Iansui',sans-serif; background:var(--bg); min-height:100vh; 
 .ed:focus { outline:2px solid var(--accent); background:rgba(255,255,255,.45); }
 
 /* 浮動位置按鈕 */
-#nudge-bar { display:flex; align-items:center; gap:4px; padding:6px 8px; background:#fff; border:1.5px solid var(--accent); border-radius:12px; font-family:system-ui,sans-serif; position:fixed; z-index:15; bottom:max(27px, calc(env(safe-area-inset-bottom) + 15px)); left:50%; transform:translate(calc(-50% + var(--dx, 0px)), var(--dy, 0px)); width:600px; box-shadow:0 4px 18px rgba(0,0,0,.2); min-width:max-content; }
+#nudge-bar { display:flex; align-items:center; gap:4px; padding:6px 8px; background:#fff; border:1.5px solid var(--accent); border-radius:12px; font-family:system-ui,sans-serif; position:fixed; z-index:15; bottom:calc(max(27px, calc(env(safe-area-inset-bottom) + 15px)) + var(--kb, 0px)); left:50%; transform:translate(calc(-50% + var(--dx, 0px)), var(--dy, 0px)); width:600px; box-shadow:0 4px 18px rgba(0,0,0,.2); min-width:max-content; }
 body:not(.preview):not(.mode-form) { padding-bottom:111px; }
 #nudge-bar .nb-grip { width:18px; text-align:center; color:var(--muted); cursor:grab; touch-action:none; user-select:none; font-size:16px; line-height:1; letter-spacing:-2px; }
 #nudge-bar .nb-grip:active { cursor:grabbing; }
@@ -144,9 +144,11 @@ body.preview .app-body { justify-content:center; }
 #cal .cf button:hover { background:rgba(136,117,132,.12); }
 
 @media (max-width:700px) { .app-body { flex-direction:column; align-items:center; gap:14px; } #form-panel { width:100%; max-width:420px; } }
-@media (max-width:700px) { body { padding:12px 10px 40px; } .canvas { zoom:.74; } }
-@media (max-width:500px) { .canvas { zoom:.60; } }
-@media (max-width:420px) { .canvas { zoom:.54; } }
+@media (max-width:700px) { body { padding:12px 10px 40px; } }
+#canvas-wrap { width:600px; height:600px; flex-shrink:0; }
+#canvas-wrap .canvas { transform-origin:top left; }
+/* iPhone 輸入框字級小於 16px 會自動放大畫面 */
+#form-panel input[type="text"], #form-panel input[type="date"], #form-panel textarea { font-size:16px !important; }
 </style>
 </head>
 <body>
@@ -211,6 +213,7 @@ body.preview .app-body { justify-content:center; }
   <button type="button" data-d="c" class="clr" id="nb-clr" title="切換紅／紫"></button>
   <button type="button" id="nb-min" title="縮小">—</button>
 </div>
+<div id="canvas-wrap">
 <div class="canvas" id="the-canvas">
   <div class="content-area">
 
@@ -247,6 +250,7 @@ body.preview .app-body { justify-content:center; }
 
 </div>
 
+</div>
 </div>
 </div>
 
@@ -412,6 +416,13 @@ function applyBarPos() {
   $('nb-min').textContent = barPos.mini ? '調位置 ▲' : '—';
   $('nb-min').title = barPos.mini ? '展開' : '縮小';
 }
+/* 手機鍵盤跳出時（iOS 不會縮小版面，只縮小可視區），把按鈕列推到鍵盤上方 */
+function adjustForKeyboard() {
+  const vv = window.visualViewport;
+  const kb = vv ? Math.max(0, window.innerHeight - vv.height - vv.offsetTop) : 0;
+  $('nudge-bar').style.setProperty('--kb', Math.round(kb) + 'px');
+}
+function visibleBottom() { const vv = window.visualViewport; return vv ? vv.offsetTop + vv.height : innerHeight; }
 function clampBar() {
   const bar = $('nudge-bar');
   if (!bar.offsetParent && getComputedStyle(bar).position !== 'fixed') return;
@@ -421,7 +432,7 @@ function clampBar() {
   if (r.left < 4) ax = 4 - r.left;
   else if (r.right > innerWidth - 4) ax = innerWidth - 4 - r.right;
   if (r.top < 4) ay = 4 - r.top;
-  else if (r.bottom > innerHeight - 4) ay = innerHeight - 4 - r.bottom;
+  else if (r.bottom > visibleBottom() - 4) ay = visibleBottom() - 4 - r.bottom;
   if (ax || ay) {
     barPos.dx += ax; barPos.dy += ay;
     bar.style.setProperty('--dx', barPos.dx + 'px');
@@ -429,6 +440,11 @@ function clampBar() {
   }
 }
 function initBar() {
+  fitCanvas();
+  if (window.visualViewport) {
+    ['resize', 'scroll'].forEach(ev => window.visualViewport.addEventListener(ev, () => { adjustForKeyboard(); clampBar(); }));
+  }
+  adjustForKeyboard();
   Object.assign(barPos, lsGet(BAR_KEY) || {});
   applyBarPos();
   const grip = $('nb-grip');
@@ -450,7 +466,15 @@ function initBar() {
   grip.addEventListener('dblclick', () => { barPos.dx = 0; barPos.dy = 0; applyBarPos(); clampBar(); lsSet(BAR_KEY, barPos); });
   $('nb-min').addEventListener('click', () => { barPos.mini = !barPos.mini; applyBarPos(); placeBar(); lsSet(BAR_KEY, barPos); });
 }
-window.addEventListener('resize', () => placeBar());
+/* 手機把畫布縮小以符合螢幕寬度（用 transform 而非 zoom，字級才不會被縮到 16px 以下觸發 iPhone 自動放大） */
+function fitCanvas() {
+  const avail = document.documentElement.clientWidth - (window.innerWidth <= 700 ? 20 : 0);
+  const sc = Math.min(1, avail / 600);
+  $('canvas-wrap').style.width  = Math.round(600 * sc) + 'px';
+  $('canvas-wrap').style.height = Math.round(600 * sc) + 'px';
+  $('the-canvas').style.transform = sc < 1 ? `scale(${sc})` : '';
+}
+window.addEventListener('resize', () => { fitCanvas(); placeBar(); });
 function showBar(id) { barId = id; placeBar(); }
 function hideBar()   { barId = null; placeBar(); }
 
